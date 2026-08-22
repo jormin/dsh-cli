@@ -1,4 +1,4 @@
-name: dsh-cli Go CI/CD Pipeline
+name: Go CI/CD Pipeline
 
 on:
   push:
@@ -18,7 +18,8 @@ jobs:
     name: Go Test and Vet
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # 交叉编译与宿主 OS 无关,统一在 ubuntu 验证发布目标(darwin/linux × amd64/arm64);当前无测试,单 OS 即可
+        os: [ubuntu-latest]
         go: ["1.17.13"]
     runs-on: ${'$'}{{ matrix.os }}
     steps:
@@ -38,6 +39,13 @@ jobs:
 
       - name: Build check
         run: go build ./...
+
+      - name: Cross-compile check (release targets)
+        shell: bash
+        run: |
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build ./... || exit 1
+          done
 
   create-release:
     name: Create Release
