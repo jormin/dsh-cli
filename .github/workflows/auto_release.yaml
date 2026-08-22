@@ -21,7 +21,9 @@ jobs:
         # 交叉编译与宿主 OS 无关,统一在 ubuntu 验证发布目标(darwin/linux × amd64/arm64);当前无测试,单 OS 即可
         os: [ubuntu-latest]
         go: ["1.17.13"]
-    runs-on: ${'$'}{{ matrix.os }}
+    # 实测本仓库中 runs-on: ${'$'}{{ matrix.os }} 的 job 无法分配到 runner(永久 queued),
+    # 仅字面量标签可正常分配;矩阵仅一个 OS,故直接写死
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
