@@ -31,6 +31,7 @@
 - 禁止直接向 master 提交或推送代码
 - 所有变更必须通过 Pull Request 合入 master
 - master 始终由 PR 合并维护,保持随时可发布的稳定状态
+- **创建 PR 或合并 PR 时不得删除本地/远程分支**(禁止 `gh pr merge --delete-branch` 及任何自动删分支操作);分支保留,清理仅由人工显式决定
 
 ## 提交流程
 
