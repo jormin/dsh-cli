@@ -112,7 +112,7 @@ func runUpgrade() error {
 	}
 
 	if compareVersions(lv, cv) <= 0 {
-		fmt.Println("✓ 已是最新版本: v" + current)
+		fmt.Println("已是最新版本: v" + current)
 		return nil
 	}
 
@@ -133,7 +133,7 @@ func runUpgrade() error {
 		plat += ".exe"
 	}
 	url := fmt.Sprintf("https://github.com/%s/releases/latest/download/dsh_%s_v%s", repo, plat, latest)
-	fmt.Println("==> 下载:", url)
+	fmt.Println("下载:", url)
 
 	tmp, err := os.CreateTemp("", "dsh-upgrade-*")
 	if err != nil {
@@ -166,6 +166,6 @@ func runUpgrade() error {
 		return fmt.Errorf("替换可执行文件失败: %w", err)
 	}
 	_ = os.Remove(backup)
-	fmt.Println("✓ 已更新到 v" + latest + ",请重新运行 dsh(当前进程退出后新版本生效)。")
+	fmt.Println("已更新到 v" + latest + ",请重新运行 dsh(当前进程退出后新版本生效)。")
 	return nil
 }

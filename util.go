@@ -137,7 +137,7 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 		if portBusy() {
 			return errors.New("进程未能终止,端口 " + strconv.Itoa(webPort) + " 仍被占用")
 		}
-		fmt.Println("    ✓ 端口", webPort, "已释放")
+		fmt.Println("    端口", webPort, "已释放")
 	}
 
 	dir, err := dshBaseDir()
@@ -165,7 +165,7 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	}
 	_ = os.WriteFile(filepath.Join(dir, "web.pid"), []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0o644)
 
-	fmt.Println("==> 后台启动服务: pnpm dsh web --no-open")
+	fmt.Println("启动后台服务: pnpm dsh web --no-open")
 	fmt.Println("    PID   :", cmd.Process.Pid)
 	fmt.Println("    URL   : http://127.0.0.1:" + strconv.Itoa(webPort))
 	fmt.Println("    日志  :", logPath)
@@ -179,11 +179,11 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	go func() { done <- cmd.Wait() }()
 
 	if waitPort(readyTimeout) {
-		fmt.Println("    ✓ 服务已启动: http://127.0.0.1:" + strconv.Itoa(webPort))
+		fmt.Println("    服务已启动: http://127.0.0.1:" + strconv.Itoa(webPort))
 		return nil
 	}
 	if logContainsMarker(logPath, readyMarker) {
-		fmt.Println("    ✓ 服务进程已启动(日志已确认): http://127.0.0.1:" + strconv.Itoa(webPort))
+		fmt.Println("    服务已启动(日志确认): http://127.0.0.1:" + strconv.Itoa(webPort))
 		return nil
 	}
 	select {
@@ -201,7 +201,7 @@ func stopService() error {
 		fmt.Println("未检测到运行中的服务(端口", webPort, "空闲)")
 		return nil
 	}
-	fmt.Println("==> 终止进程:", strings.Join(pids, ", "))
+	fmt.Println("终止进程:", strings.Join(pids, ", "))
 	killPids(pids)
 	time.Sleep(2 * time.Second)
 	if portBusy() {
@@ -210,6 +210,6 @@ func stopService() error {
 	if dir, err := dshBaseDir(); err == nil {
 		_ = os.Remove(filepath.Join(dir, "web.pid"))
 	}
-	fmt.Println("    ✓ 服务已停止")
+	fmt.Println("    服务已停止")
 	return nil
 }
