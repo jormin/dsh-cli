@@ -1,4 +1,4 @@
-name: dsh-cli Go CI/CD Pipeline
+name: Go CI/CD Pipeline
 
 on:
   push:
@@ -18,9 +18,11 @@ jobs:
     name: Go Test and Vet
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # 交叉编译与宿主 OS 无关,统一在 ubuntu 验证发布目标(darwin/linux × amd64/arm64);当前无测试,单 OS 即可
+        os: [ubuntu-latest]
         go: ["1.17.13"]
-    runs-on: ${'$'}{{ matrix.os }}
+    # runs-on 使用字面量:矩阵表达式形式在本仓库一直无法分配到 runner(仅排队不执行),实测字面量可正常运行
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,7 +30,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: ${'$'}{{ matrix.go }}
+          go-version: ${{ matrix.go }}
 
       - name: Run go vet
         run: go vet ./...
@@ -38,6 +40,13 @@ jobs:
 
       - name: Build check
         run: go build ./...
+
+      - name: Cross-compile check (release targets)
+        shell: bash
+        run: |
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 go build ./... || exit 1
+          done
 
   create-release:
     name: Create Release
@@ -119,9 +128,9 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${'$'}{{ env.tag }}
-          name: ${'$'}{{ env.tag }}
+          tag_name: ${{ env.tag }}
+          name: ${{ env.tag }}
           body_path: commit_message.txt
           files: target/*
         env:
-          GITHUB_TOKEN: ${'$'}{{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
