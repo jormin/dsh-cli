@@ -68,9 +68,9 @@ func runUpdate(checkOnly bool) error {
 	}
 	fmt.Println("使用仓库:", repo)
 
-	fmt.Println("==> 拉取远程 tags (git fetch --tags --prune origin) ...")
+	fmt.Println("==> 拉取远程 tags: git fetch --tags --prune origin")
 	if err := runCmd(repo, "git", "fetch", "--tags", "--prune", "origin"); err != nil {
-		fmt.Println("警告:无法连接远程仓库,将基于本地已有 tag 判断")
+		fmt.Println("警告: 无法连接远程仓库,将基于本地已有 tag 判断")
 	}
 
 	latest, err := latestTagByCreation(repo)
@@ -90,12 +90,12 @@ func runUpdate(checkOnly bool) error {
 	}
 
 	fmt.Println()
-	fmt.Println("最新版本 tag :", latest)
-	fmt.Println("当前分支     :", branch)
-	fmt.Println("当前检出位置 :", strings.TrimSpace(head), "(", strings.TrimSpace(desc), ")")
+	fmt.Println("最新版本 tag:", latest)
+	fmt.Println("当前分支    :", branch)
+	fmt.Println("当前检出位置:", strings.TrimSpace(head)+" ("+strings.TrimSpace(desc)+")")
 
 	if currentOnTag(repo, latest) {
-		fmt.Println("✓ 当前已是最新版本", latest, "。")
+		fmt.Println("✓ 当前已是最新版本:", latest)
 		if checkOnly {
 			return nil
 		}
@@ -106,11 +106,11 @@ func runUpdate(checkOnly bool) error {
 	}
 
 	if checkOnly {
-		fmt.Println("存在新版本", latest, ",当前不在该版本上。运行 dsh update 可一键更新。")
+		fmt.Println("发现新版本:", latest, "当前不在该版本上,运行 dsh update 可一键更新。")
 		return errors.New("检测到新版本: " + latest)
 	}
 
-	fmt.Println("当前未检出在最新标签", latest, "上(当前:", branch, ")。")
+	fmt.Println("当前未检出在最新标签", latest, "上(当前分支:", branch+")")
 	if !askYN("是否更新到 " + latest + "?") {
 		fmt.Println("已取消,未做任何更改。")
 		return nil
@@ -122,7 +122,7 @@ func runUpdate(checkOnly bool) error {
 	}
 
 	fmt.Println()
-	fmt.Println("==> 切换到", latest, "...")
+	fmt.Println("==> 切换到版本:", latest)
 	if err := runCmd(repo, "git", "checkout", latest); err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func runUpdate(checkOnly bool) error {
 		return fmt.Errorf("pnpm install 失败: %w", err)
 	}
 
-	fmt.Println("==> 重新构建: pnpm run build (可能需要几分钟) ...")
+	fmt.Println("==> 重新构建: pnpm run build (可能需要几分钟)")
 	if err := runCmd(repo, "pnpm", "run", "build"); err != nil {
 		return fmt.Errorf("pnpm run build 失败: %w", err)
 	}
