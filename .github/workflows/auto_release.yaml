@@ -1,0 +1,127 @@
+name: dsh-cli Go CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+
+  test:
+    name: Go Test and Vet
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: ["1.17.13"]
+    runs-on: ${'$'}{{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${'$'}{{ matrix.go }}
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run unit tests
+        run: go test ./...
+
+      - name: Build check
+        run: go build ./...
+
+  create-release:
+    name: Create Release
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 1.17.13
+
+      - name: Create target directory
+        run: mkdir -p target
+
+      - name: Set up tag
+        id: set-up-tag
+        run: |
+          latest_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Latest tag: $latest_tag"
+
+          tag="v0.0.1"
+          if [ ! -z "$latest_tag" ]; then
+            latest_tag=$(echo $latest_tag | sed 's/^v//')
+            IFS='.' read -r major minor patch <<< "$latest_tag"
+            if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]] || ! [[ "$patch" =~ ^[0-9]+$ ]]; then
+              echo "Error: Version numbers must be integers."
+              exit 1
+            fi
+            if (( patch < 9 )); then
+              patch=$((patch + 1))
+            elif (( patch == 9 && minor < 9 )); then
+              patch=0
+              minor=$((minor + 1))
+            elif (( patch == 9 && minor == 9 )); then
+              patch=0
+              minor=0
+              major=$((major + 1))
+            else
+              echo "Error: Invalid version numbers: major=$major, minor=$minor, patch=$patch"
+              exit 1
+            fi
+            tag="v$major.$minor.$patch"
+          fi
+          echo "New version: $tag"
+          echo "tag=$tag" >> $GITHUB_ENV
+          echo "tag: $tag"
+
+      - name: Compile Source Code
+        id: compile-source-code
+        run: |
+          bash build.sh $tag
+
+      - name: Get latest commit message
+        id: get_commit_message
+        run: |
+          echo "$(git log -1 --pretty=%B)" > commit_message.txt
+          cat commit_message.txt
+
+      - name: Create tag
+        shell: bash
+        run: |
+          git config --global user.name 'github-actions-bot'
+          git config --global user.email 'github-actions-bot@users.noreply.github.com'
+          if git rev-parse "$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists, skipping tag creation"
+          else
+            git tag -a $tag -F commit_message.txt
+            git push origin $tag
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${'$'}{{ env.tag }}
+          name: ${'$'}{{ env.tag }}
+          body_path: commit_message.txt
+          files: target/*
+        env:
+          GITHUB_TOKEN: ${'$'}{{ secrets.GITHUB_TOKEN }}
