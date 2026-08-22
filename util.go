@@ -126,7 +126,7 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	if portBusy() {
 		fmt.Println("注意: 端口", webPort, "已被占用,占用进程如下:")
 		if pids := portPids(); len(pids) > 0 {
-			fmt.Println("    PID   :", strings.Join(pids, ", "))
+			fmt.Println("PID   :", strings.Join(pids, ", "))
 		}
 		fmt.Println("(终止该进程可能会中断正在运行的 dsh 会话/任务)")
 		if !askYN("是否终止占用进程并继续?") {
@@ -137,7 +137,7 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 		if portBusy() {
 			return errors.New("进程未能终止,端口 " + strconv.Itoa(webPort) + " 仍被占用")
 		}
-		fmt.Println("    端口", webPort, "已释放")
+		fmt.Println("端口", webPort, "已释放")
 	}
 
 	dir, err := dshBaseDir()
@@ -166,10 +166,10 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	_ = os.WriteFile(filepath.Join(dir, "web.pid"), []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0o644)
 
 	fmt.Println("启动后台服务: pnpm dsh web --no-open")
-	fmt.Println("    PID   :", cmd.Process.Pid)
-	fmt.Println("    URL   : http://127.0.0.1:" + strconv.Itoa(webPort))
-	fmt.Println("    日志  :", logPath)
-	fmt.Println("    停止  : dsh web stop (或 kill " + strconv.Itoa(cmd.Process.Pid) + ")")
+	fmt.Println("PID   :", cmd.Process.Pid)
+	fmt.Println("URL   : http://127.0.0.1:" + strconv.Itoa(webPort))
+	fmt.Println("日志  :", logPath)
+	fmt.Println("停止  : dsh web stop (或 kill " + strconv.Itoa(cmd.Process.Pid) + ")")
 
 	// 就绪等待:冷启动需先完成 pnpm 依赖校验与 tsx 启动,放宽到 60s;
 	// 日志出现服务就绪标记(dsh web:)也视为已就绪,避免启动稍慢时误报.
@@ -179,11 +179,11 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	go func() { done <- cmd.Wait() }()
 
 	if waitPort(readyTimeout) {
-		fmt.Println("    服务已启动: http://127.0.0.1:" + strconv.Itoa(webPort))
+		fmt.Println("服务已启动: http://127.0.0.1:" + strconv.Itoa(webPort))
 		return nil
 	}
 	if logContainsMarker(logPath, readyMarker) {
-		fmt.Println("    服务已启动(日志确认): http://127.0.0.1:" + strconv.Itoa(webPort))
+		fmt.Println("服务已启动(日志确认): http://127.0.0.1:" + strconv.Itoa(webPort))
 		return nil
 	}
 	select {
@@ -210,6 +210,6 @@ func stopService() error {
 	if dir, err := dshBaseDir(); err == nil {
 		_ = os.Remove(filepath.Join(dir, "web.pid"))
 	}
-	fmt.Println("    服务已停止")
+	fmt.Println("服务已停止")
 	return nil
 }
