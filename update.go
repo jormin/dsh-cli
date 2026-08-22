@@ -68,7 +68,7 @@ func runUpdate(checkOnly bool) error {
 	}
 	fmt.Println("使用仓库:", repo)
 
-	fmt.Println("==> 拉取远程 tags: git fetch --tags --prune origin")
+	fmt.Println("拉取远程 tags: git fetch --tags --prune origin")
 	if err := runCmd(repo, "git", "fetch", "--tags", "--prune", "origin"); err != nil {
 		fmt.Println("警告: 无法连接远程仓库,将基于本地已有 tag 判断")
 	}
@@ -95,7 +95,7 @@ func runUpdate(checkOnly bool) error {
 	fmt.Println("当前检出位置:", strings.TrimSpace(head)+" ("+strings.TrimSpace(desc)+")")
 
 	if currentOnTag(repo, latest) {
-		fmt.Println("✓ 当前已是最新版本:", latest)
+		fmt.Println("当前已是最新版本:", latest)
 		if checkOnly {
 			return nil
 		}
@@ -122,17 +122,17 @@ func runUpdate(checkOnly bool) error {
 	}
 
 	fmt.Println()
-	fmt.Println("==> 切换到版本:", latest)
+	fmt.Println("切换到版本:", latest)
 	if err := runCmd(repo, "git", "checkout", latest); err != nil {
 		return err
 	}
 
-	fmt.Println("==> 安装依赖: pnpm install")
+	fmt.Println("安装依赖: pnpm install")
 	if err := runCmd(repo, "pnpm", "install"); err != nil {
 		return fmt.Errorf("pnpm install 失败: %w", err)
 	}
 
-	fmt.Println("==> 重新构建: pnpm run build (可能需要几分钟)")
+	fmt.Println("重新构建: pnpm run build (可能需要几分钟)")
 	if err := runCmd(repo, "pnpm", "run", "build"); err != nil {
 		return fmt.Errorf("pnpm run build 失败: %w", err)
 	}
