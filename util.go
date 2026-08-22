@@ -67,6 +67,28 @@ func waitPort(timeout time.Duration) bool {
 	return false
 }
 
+// logContainsMarker 报告日志中是否已出现给定标记,用于辅助确认服务实际就绪.
+func logContainsMarker(path, marker string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), marker)
+}
+
+// tailLog 返回日志末尾 maxLines 行;读取失败时返回提示文本.
+func tailLog(path string, maxLines int) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "(无法读取日志: " + err.Error() + ")"
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n")
+}
+
 func killPids(pids []string) {
 	for _, p := range pids {
 		pid, err := strconv.Atoi(strings.TrimSpace(p))
@@ -102,9 +124,9 @@ func runCmd(dir, name string, args ...string) error {
 func startService(repo string, launcherFlags, appArgs []string) error {
 	// 端口占用:询问是否终止占用进程
 	if portBusy() {
-		fmt.Println("注意:端口", webPort, "已被占用,占用进程如下:")
+		fmt.Println("注意: 端口", webPort, "已被占用,占用进程如下:")
 		if pids := portPids(); len(pids) > 0 {
-			fmt.Println("  PID: " + strings.Join(pids, ", "))
+			fmt.Println("    PID   :", strings.Join(pids, ", "))
 		}
 		fmt.Println("(终止该进程可能会中断正在运行的 dsh 会话/任务)")
 		if !askYN("是否终止占用进程并继续?") {
@@ -144,16 +166,32 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	_ = os.WriteFile(filepath.Join(dir, "web.pid"), []byte(strconv.Itoa(cmd.Process.Pid)+"\n"), 0o644)
 
 	fmt.Println("==> 后台启动服务: pnpm dsh web --no-open")
-	fmt.Println("    PID :", cmd.Process.Pid)
-	fmt.Println("    URL : http://127.0.0.1:" + strconv.Itoa(webPort))
-	fmt.Println("    日志:", logPath)
-	fmt.Println("    停止: dsh web stop (或 kill", cmd.Process.Pid, ")")
+	fmt.Println("    PID   :", cmd.Process.Pid)
+	fmt.Println("    URL   : http://127.0.0.1:" + strconv.Itoa(webPort))
+	fmt.Println("    日志  :", logPath)
+	fmt.Println("    停止  : dsh web stop (或 kill " + strconv.Itoa(cmd.Process.Pid) + ")")
 
-	if waitPort(10 * time.Second) {
+	// 就绪等待:冷启动需先完成 pnpm 依赖校验与 tsx 启动,放宽到 60s;
+	// 日志出现服务就绪标记(dsh web:)也视为已就绪,避免启动稍慢时误报.
+	const readyTimeout = 60 * time.Second
+	const readyMarker = "dsh web:"
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	if waitPort(readyTimeout) {
 		fmt.Println("    ✓ 服务已启动: http://127.0.0.1:" + strconv.Itoa(webPort))
 		return nil
 	}
-	return fmt.Errorf("未能确认 %d 端口监听,请查看日志: %s", webPort, logPath)
+	if logContainsMarker(logPath, readyMarker) {
+		fmt.Println("    ✓ 服务进程已启动(日志已确认): http://127.0.0.1:" + strconv.Itoa(webPort))
+		return nil
+	}
+	select {
+	case err := <-done:
+		return fmt.Errorf("后台进程已退出(%v),请查看日志尾部:\n%s", err, tailLog(logPath, 20))
+	default:
+	}
+	return fmt.Errorf("未能在 %v 内确认端口 %d 监听,请查看日志尾部:\n%s", readyTimeout, webPort, tailLog(logPath, 20))
 }
 
 // stopService 终止占用端口的进程;未运行视为成功.

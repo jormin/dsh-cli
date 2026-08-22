@@ -46,10 +46,16 @@ func compareVersions(a, b []int) int {
 }
 
 func upgradeRepoSlug() string {
-	if env := strings.TrimSpace(os.Getenv("DSH_CLI_REPO")); env != "" {
-		return strings.TrimSuffix(env, "/")
+	slug := strings.TrimSpace(os.Getenv("DSH_CLI_REPO"))
+	if slug == "" {
+		slug = upgradeRepo
 	}
-	return upgradeRepo
+	// 容忍 "github.com/owner/repo" / "https://github.com/owner/repo" 形式的默认值或环境变量
+	slug = strings.TrimSuffix(slug, "/")
+	for _, prefix := range []string{"https://github.com/", "http://github.com/", "github.com/"} {
+		slug = strings.TrimPrefix(slug, prefix)
+	}
+	return slug
 }
 
 func latestReleaseVersion(repo string) (string, error) {
@@ -106,7 +112,7 @@ func runUpgrade() error {
 	}
 
 	if compareVersions(lv, cv) <= 0 {
-		fmt.Println("✓ 已是最新版本 v" + current)
+		fmt.Println("✓ 已是最新版本: v" + current)
 		return nil
 	}
 
