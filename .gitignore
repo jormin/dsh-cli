@@ -1,3 +1,4 @@
 /dsh
 /target
 *.old
+/docs
