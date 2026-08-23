@@ -168,7 +168,7 @@ func TestRunSyncInteractiveInitSeeds(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(syncRepo, ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"},\"l/only\":{\"version\":\"0.9.0\"}}}]"}
+	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"},\"l/only\":{\"version\":\"0.9.0\"}}}]", remoteEmpty: true}
 	var out strings.Builder
 	d := NewDecider(strings.NewReader("y\n"), &out)
 	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, noopBusy, d)
@@ -177,6 +177,12 @@ func TestRunSyncInteractiveInitSeeds(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "初始化") {
 		t.Fatalf("missing init message: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "跳过 git pull") {
+		t.Fatalf("空远端应提示跳过 pull: %s", out.String())
+	}
+	if rec.contains("git", "-C", syncRepo, "pull") {
+		t.Fatalf("空远端不应执行 git pull:%v", rec.cmds)
 	}
 	if !rec.contains("git", "-C", syncRepo, "add", "-A") {
 		t.Fatalf("seed 应写回并 commit:%v", rec.cmds)
@@ -249,10 +255,11 @@ func TestRunSyncInteractiveDeclineInit(t *testing.T) {
 	}
 }
 
-// recorderRunner 记录命令;命中 ls 时返回 fixture。
+// recorderRunner 记录命令;命中 ls 时返回 fixture;remoteEmpty 时 ls-remote 返回空(空远端)。
 type recorderRunner struct {
-	cmds   [][]string
-	lsJSON string
+	cmds        [][]string
+	lsJSON      string
+	remoteEmpty bool
 }
 
 func (r *recorderRunner) run(dir, name string, args ...string) ([]byte, error) {
@@ -261,6 +268,12 @@ func (r *recorderRunner) run(dir, name string, args ...string) ([]byte, error) {
 	for _, a := range args {
 		if a == "ls" {
 			return []byte(r.lsJSON), nil
+		}
+		if a == "ls-remote" {
+			if r.remoteEmpty {
+				return nil, nil
+			}
+			return []byte("refs/heads/main\n"), nil
 		}
 	}
 	return nil, nil

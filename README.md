@@ -53,6 +53,7 @@
 - **默认流程**:git pull → 对比表格 → 全局选择(1=全部本机 / 2=全部仓库 / 3=逐项)→ 逐项选择(1=本机 / 2=仓库 / 3=跳过)→ 写回 plugins.yaml 并 commit/push(仅 DSH_SYNC_REPO)→ 有变更则 `dsh plugin add/remove` 调整本机插件并重启 web 服务
 - `--yes`:跳过交互,差异项跟随 `--prefer local|remote`(默认 remote)
 - 仓库尚无 `plugins.yaml` 时视为空清单:`status`/`sync` 都会先提示;交互模式会先询问是否用本机清单初始化仓库(`--yes` 跳过询问)
+- 同步仓库远端为空(首次 clone)时自动跳过 `git pull`,可直接首次初始化;首次推送自动 `--set-upstream`,无需手工配置
 - 凭据(`.credentials.yaml`)永不入库;插件使用 `--save-exact` 精确锁定版本
 
 ### `dsh upgrade`

@@ -66,8 +66,12 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 	scanner := LocalScanner{Repo: env.repo, Home: env.home, Run: run}
 	// 先 pull 再扫描本地,保证与本机实装状态一致(plugins.yaml 损坏时也会先暴露在 pull 之后)
 	if mode&statusOnly == 0 {
-		if err := git.Pull(); err != nil {
-			return fmt.Errorf("已中止,请先手动解决同步仓库的 pull 冲突后重试: %w", err)
+		pulled, err := git.Pull()
+		if err != nil {
+			return fmt.Errorf("已中止,请先手动解决同步仓库的 pull 失败后重试: %w", err)
+		}
+		if !pulled {
+			fmt.Fprintln(out, "(同步仓库远端为空,已跳过 git pull,可直接首次初始化)")
 		}
 	}
 	local, err := scanner.All()
