@@ -43,6 +43,7 @@
 
 - 等价于源码仓库的 `dsh plugin --profile <name> <pnpm args...>`
 - 例:`dsh plugin add @deepseek-ai/dsh-xxx`、`dsh plugin remove <pkg>`
+- add/remove/update 成功后询问是否启动/重启 web 服务(措辞随当前运行状态)
 
 ### `dsh sync [status]`
 
