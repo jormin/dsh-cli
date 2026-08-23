@@ -23,13 +23,21 @@ func (g GitOps) IsRepo() bool {
 	return err == nil && st.IsDir()
 }
 
-// Pull 拉取远端并合并;失败(含冲突)由调用方中止流程。
-func (g GitOps) Pull() error {
-	out, err := g.Run("", "git", "-C", g.Repo, "pull")
+// Pull 拉取远端并合并;pulled=false 表示远端为空仓库(无任何 head),无需拉取。
+// 失败(含冲突)由调用方中止流程。
+func (g GitOps) Pull() (bool, error) {
+	out, err := g.Run("", "git", "-C", g.Repo, "ls-remote", "--heads", "origin")
 	if err != nil {
-		return fmt.Errorf("git pull 失败: %w\n%s", err, strings.TrimSpace(string(out)))
+		return false, fmt.Errorf("git ls-remote 失败: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
-	return nil
+	if strings.TrimSpace(string(out)) == "" {
+		return false, nil // 远端没有任何分支:首次克隆的空仓库,无内容可拉
+	}
+	out, err = g.Run("", "git", "-C", g.Repo, "pull")
+	if err != nil {
+		return false, fmt.Errorf("git pull 失败: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return true, nil
 }
 
 // CommitAll 提交全部变更(仅 DSH_SYNC_REPO 工作树)。
@@ -43,9 +51,9 @@ func (g GitOps) CommitAll(msg string) error {
 	return nil
 }
 
-// Push 推送当前分支。
+// Push 推送当前分支;-u origin HEAD 保证首次推送(空仓库)也能自动建立 upstream。
 func (g GitOps) Push() error {
-	out, err := g.Run("", "git", "-C", g.Repo, "push")
+	out, err := g.Run("", "git", "-C", g.Repo, "push", "-u", "origin", "HEAD")
 	if err != nil {
 		return fmt.Errorf("git push 失败: %w\n%s", err, strings.TrimSpace(string(out)))
 	}

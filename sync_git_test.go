@@ -7,8 +7,10 @@ import (
 )
 
 type fakeGitRunner struct {
-	cmds [][]string
-	err  error
+	cmds    [][]string
+	err     error // 所有命令报错
+	pullErr error // 仅 git pull 报错
+	lsEmpty bool  // ls-remote 返回空(空远端)
 }
 
 func (f *fakeGitRunner) Run(dir, name string, args ...string) ([]byte, error) {
@@ -16,13 +18,28 @@ func (f *fakeGitRunner) Run(dir, name string, args ...string) ([]byte, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
+	for _, a := range args {
+		if a == "ls-remote" {
+			if f.lsEmpty {
+				return nil, nil
+			}
+			return []byte("refs/heads/main\n"), nil
+		}
+	}
+	if f.pullErr != nil {
+		for _, a := range args {
+			if a == "pull" {
+				return nil, f.pullErr
+			}
+		}
+	}
 	return nil, nil
 }
 
 func TestGitOpsCommands(t *testing.T) {
 	f := &fakeGitRunner{}
 	g := GitOps{Repo: "/sync", Run: f.Run}
-	if err := g.Pull(); err != nil {
+	if _, err := g.Pull(); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.CommitAll("sync: update plugin manifest"); err != nil {
@@ -32,10 +49,11 @@ func TestGitOpsCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][]string{
+		{"git", "-C", "/sync", "ls-remote", "--heads", "origin"},
 		{"git", "-C", "/sync", "pull"},
 		{"git", "-C", "/sync", "add", "-A"},
 		{"git", "-C", "/sync", "commit", "-m", "sync: update plugin manifest"},
-		{"git", "-C", "/sync", "push"},
+		{"git", "-C", "/sync", "push", "-u", "origin", "HEAD"},
 	}
 	if len(f.cmds) != len(want) {
 		t.Fatalf("cmd count=%d want=%d (%v)", len(f.cmds), len(want), f.cmds)
@@ -50,10 +68,29 @@ func TestGitOpsCommands(t *testing.T) {
 }
 
 func TestGitOpsPullConflictAborts(t *testing.T) {
-	f := &fakeGitRunner{err: os.ErrNotExist}
+	f := &fakeGitRunner{pullErr: os.ErrNotExist}
 	g := GitOps{Repo: "/sync", Run: f.Run}
-	if err := g.Pull(); err == nil {
+	if _, err := g.Pull(); err == nil {
 		t.Fatal("expected pull error")
+	}
+}
+
+func TestGitOpsPullEmptyRemoteSkips(t *testing.T) {
+	f := &fakeGitRunner{lsEmpty: true}
+	g := GitOps{Repo: "/sync", Run: f.Run}
+	pulled, err := g.Pull()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pulled {
+		t.Fatal("空远端不应执行拉取")
+	}
+	for _, c := range f.cmds {
+		for _, a := range c {
+			if a == "pull" {
+				t.Fatalf("空远端不应执行 git pull:%v", f.cmds)
+			}
+		}
 	}
 }
 
