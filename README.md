@@ -15,6 +15,7 @@
 | 变量 | 必需 | 说明 |
 |---|---|---|
 | `DSH_REPO` | 是 | DeepSeek Harness 源码仓库的绝对路径。未设置或路径无效时命令直接报错退出 |
+| `DSH_SYNC_REPO` | 否(仅 sync 需要) | 插件清单 git 仓库目录(含 plugins.yaml),仅 `dsh sync` 使用 |
 
 ## 命令总览
 
@@ -42,6 +43,17 @@
 
 - 等价于源码仓库的 `dsh plugin --profile <name> <pnpm args...>`
 - 例:`dsh plugin add @deepseek-ai/dsh-xxx`、`dsh plugin remove <pkg>`
+
+### `dsh sync [status]`
+
+跨机同步插件清单(仅插件,不含配置与会话数据)。
+
+- 环境变量 `DSH_SYNC_REPO` 指向已 clone 的私有 git 仓库,仓库内维护 `plugins.yaml`(按 profile 分组记录插件名与版本)
+- **status**:只读,输出本机实装与仓库清单的对比表格,不做任何变更
+- **默认流程**:git pull → 对比表格 → 全局选择(1=全部本机 / 2=全部仓库 / 3=逐项)→ 逐项选择(1=本机 / 2=仓库 / 3=跳过)→ 写回 plugins.yaml 并 commit/push(仅 DSH_SYNC_REPO)→ 有变更则 `dsh plugin add/remove` 调整本机插件并重启 web 服务
+- `--yes`:跳过交互,差异项跟随 `--prefer local|remote`(默认 remote)
+- 仓库尚无 `plugins.yaml` 时视为空清单:`status`/`sync` 都会先提示;交互模式会先询问是否用本机清单初始化仓库(`--yes` 跳过询问)
+- 凭据(`.credentials.yaml`)永不入库;插件使用 `--save-exact` 精确锁定版本
 
 ### `dsh upgrade`
 
