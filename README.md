@@ -55,6 +55,7 @@
 - `--yes`:跳过交互,差异项跟随 `--prefer local|remote`(默认 remote)
 - 仓库尚无 `plugins.yaml` 时视为空清单:`status`/`sync` 都会先提示;交互模式会先询问是否用本机清单初始化仓库(`--yes` 跳过询问)
 - 同步仓库远端为空(首次 clone)时自动跳过 `git pull`,可直接首次初始化;首次推送自动 `--set-upstream`,无需手工配置
+- 拉取/扫描阶段有进度提示,不会干等;两侧无差异时直接结束,不做任何选择与调整
 - 凭据(`.credentials.yaml`)永不入库;插件使用 `--save-exact` 精确锁定版本
 
 ### `dsh upgrade`
