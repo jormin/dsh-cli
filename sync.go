@@ -25,6 +25,13 @@ type syncCtx struct {
 	repo, syncRepo, home string
 }
 
+// serviceHooks 服务生命周期操作(测试注入;nil 使用产品实现)。
+type serviceHooks struct {
+	busy    func() bool
+	restart func(repo string) error
+	start   func(repo string) error
+}
+
 // syncEnv 校验并解析同步环境;home 可选(默认 DSH_HOME 或 ~/.dsh)。
 func syncEnv(repo, syncRepo string, home ...string) (syncCtx, error) {
 	ctx := syncCtx{repo: repo, syncRepo: syncRepo, home: dshHome()}
@@ -45,7 +52,7 @@ var defaultRunner CmdRunner = execRunner
 
 // runSync 编排完整流程;run 为外部命令执行器(产品默认 defaultRunner,测试注入 fake);
 // busy 为"web 是否运行中"探针(产品默认 portBusy,测试注入常量)。
-func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdRunner, busy func() bool, d *Decider) error {
+func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdRunner, svc *serviceHooks, d *Decider) error {
 	env, err := syncEnv(repo, syncRepo, home)
 	if err != nil {
 		return err
@@ -53,8 +60,14 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 	if run == nil {
 		run = defaultRunner
 	}
-	if busy == nil {
-		busy = portBusy
+	if svc == nil {
+		svc = &serviceHooks{
+			busy:    portBusy,
+			restart: restartWeb,
+			start: func(repo string) error {
+				return startService(repo, nil, nil)
+			},
+		}
 	}
 	if d == nil {
 		d = NewDecider(os.Stdin, out)
@@ -138,7 +151,7 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 		fmt.Fprintln(out, "清单无变化,跳过写回。")
 	}
 
-	// 6) apply;7) 重启
+	// 6) apply;7) 启动/重启询问
 	changed, errs := ApplyChanges(env.repo, final, local, run, out)
 	if len(errs) > 0 {
 		return fmt.Errorf("部分插件调整失败(已成功的保留):\n%v", errs)
@@ -147,15 +160,49 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 		fmt.Fprintln(out, "本地无变更,未做调整。")
 		return nil
 	}
-	if decideRestart(changed, busy) {
-		fmt.Fprintln(out, "插件已变更,重启 web 服务…")
-		if err := restartWeb(env.repo); err != nil {
+	if mode&flagYes != 0 {
+		// --yes:非交互,维持自动行为
+		if decideRestart(changed, svc.busy) {
+			fmt.Fprintln(out, "插件已变更,重启 web 服务…")
+			if err := svc.restart(env.repo); err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "已重启。")
+			return nil
+		}
+		fmt.Fprintln(out, "插件已调整,web 未在运行,可执行 dsh web start 启动。")
+		return nil
+	}
+	// 交互:有变更时询问启动/重启,措辞随当前运行状态
+	if svc.busy() {
+		ok, err := d.YesNo("插件已变更,是否重启 web 服务?")
+		if err != nil {
+			return err
+		}
+		if !ok {
+			fmt.Fprintln(out, "已取消重启。可稍后手动运行 dsh web restart。")
+			return nil
+		}
+		fmt.Fprintln(out, "重启 web 服务…")
+		if err := svc.restart(env.repo); err != nil {
 			return err
 		}
 		fmt.Fprintln(out, "已重启。")
 		return nil
 	}
-	fmt.Fprintln(out, "插件已调整,web 未在运行,可执行 dsh web start 启动。")
+	ok, err := d.YesNo("插件已变更,是否启动 web 服务?")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Fprintln(out, "已取消启动。可稍后手动运行 dsh web start。")
+		return nil
+	}
+	fmt.Fprintln(out, "启动 web 服务…")
+	if err := svc.start(env.repo); err != nil {
+		return err
+	}
+	fmt.Fprintln(out, "已启动。")
 	return nil
 }
 
@@ -342,7 +389,7 @@ func syncCmd() *cobra.Command {
 			if prefer == "local" {
 				mode |= flagPreferLocal
 			}
-			return runSync(mode, repo, os.Getenv("DSH_SYNC_REPO"), "", os.Stdout, defaultRunner, portBusy, nil)
+			return runSync(mode, repo, os.Getenv("DSH_SYNC_REPO"), "", os.Stdout, defaultRunner, nil, nil)
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "跳过全部交互,差异项跟随全局倾向(默认用仓库版本)")

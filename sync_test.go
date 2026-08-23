@@ -20,7 +20,12 @@ func noopRunner(_ string, _ string, _ ...string) ([]byte, error) {
 	return nil, nil
 }
 
-func noopBusy() bool { return false }
+// noopHooks 测试用服务 hooks:未运行、操作空实现。
+var noopHooks = &serviceHooks{
+	busy:    func() bool { return false },
+	restart: func(string) error { return nil },
+	start:   func(string) error { return nil },
+}
 
 func TestValidateEnv(t *testing.T) {
 	if _, err := syncEnv("", "/repo"); err == nil || !strings.Contains(err.Error(), "DSH_REPO") {
@@ -39,7 +44,7 @@ func TestRunSyncStatusReadOnly(t *testing.T) {
 	}
 	var out strings.Builder
 	var runner failRunner
-	err := runSync(statusOnly, "/repo", syncRepo, home, &out, runner.Run, noopBusy, nil)
+	err := runSync(statusOnly, "/repo", syncRepo, home, &out, runner.Run, noopHooks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +63,7 @@ func TestRunSyncFullYesNoChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out strings.Builder
-	err := runSync(fullSync|flagYes, "/repo", syncRepo, home, &out, noopRunner, noopBusy, nil)
+	err := runSync(fullSync|flagYes, "/repo", syncRepo, home, &out, noopRunner, noopHooks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +110,7 @@ func TestRunSyncFullYesAppliesRemote(t *testing.T) {
 
 	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"},\"l/only\":{\"version\":\"0.9.0\"}}}]"}
 	var out strings.Builder
-	err := runSync(fullSync|flagYes, "/repo", syncRepo, home, &out, rec.run, noopBusy, nil)
+	err := runSync(fullSync|flagYes, "/repo", syncRepo, home, &out, rec.run, noopHooks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +156,7 @@ func TestRunSyncStatusMissingManifestWarns(t *testing.T) {
 	}
 	var out strings.Builder
 	var runner failRunner
-	err := runSync(statusOnly, "/repo", syncRepo, home, &out, runner.Run, noopBusy, nil)
+	err := runSync(statusOnly, "/repo", syncRepo, home, &out, runner.Run, noopHooks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +176,7 @@ func TestRunSyncInteractiveInitSeeds(t *testing.T) {
 	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"},\"l/only\":{\"version\":\"0.9.0\"}}}]", remoteEmpty: true}
 	var out strings.Builder
 	d := NewDecider(strings.NewReader("y\n"), &out)
-	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, noopBusy, d)
+	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, noopHooks, d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +219,7 @@ func TestRunSyncFullYesMissingManifestRemovesAll(t *testing.T) {
 	}
 	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"},\"l/only\":{\"version\":\"0.9.0\"}}}]"}
 	var out strings.Builder
-	err := runSync(fullSync|flagYes, "/repo", syncRepo, home, &out, rec.run, noopBusy, nil)
+	err := runSync(fullSync|flagYes, "/repo", syncRepo, home, &out, rec.run, noopHooks, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +248,7 @@ func TestRunSyncInteractiveDeclineInit(t *testing.T) {
 	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"}}}]"}
 	var out strings.Builder
 	d := NewDecider(strings.NewReader("n\n2\n"), &out)
-	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, noopBusy, d)
+	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, noopHooks, d)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,6 +257,122 @@ func TestRunSyncInteractiveDeclineInit(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(syncRepo, "plugins.yaml")); !os.IsNotExist(statErr) {
 		t.Fatal("decline 后不应写 plugins.yaml")
+	}
+}
+
+// 交互模式 + 有变更 + web 运行中:询问重启,选 y 则重启。
+func TestRunSyncInteractiveAskRestart(t *testing.T) {
+	home := t.TempDir()
+	mkPackageJSON(t, home, "web", "{\"name\":\"dsh-profile-web\"}")
+	syncRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(syncRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "profiles:\n  web: []\n"
+	if err := os.WriteFile(filepath.Join(syncRepo, "plugins.yaml"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restarted := false
+	started := false
+	hooks := &serviceHooks{
+		busy: func() bool { return true },
+		restart: func(string) error {
+			restarted = true
+			return nil
+		},
+		start: func(string) error {
+			started = true
+			return nil
+		},
+	}
+	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"l/only\":{\"version\":\"0.9.0\"}}}]"}
+	var out strings.Builder
+	d := NewDecider(strings.NewReader("2\ny\n"), &out)
+	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, hooks, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !restarted || started {
+		t.Fatalf("restarted=%v started=%v,want 重启且不启动", restarted, started)
+	}
+	if !strings.Contains(out.String(), "是否重启 web 服务?") || !strings.Contains(out.String(), "已重启。") {
+		t.Fatalf("output: %s", out.String())
+	}
+}
+
+// 交互模式 + 有变更 + web 未运行:询问启动,选 y 则启动。
+func TestRunSyncInteractiveAskStart(t *testing.T) {
+	home := t.TempDir()
+	mkPackageJSON(t, home, "web", "{\"name\":\"dsh-profile-web\"}")
+	syncRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(syncRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "profiles:\n  web: []\n"
+	if err := os.WriteFile(filepath.Join(syncRepo, "plugins.yaml"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restarted := false
+	started := false
+	hooks := &serviceHooks{
+		busy: func() bool { return false },
+		restart: func(string) error {
+			restarted = true
+			return nil
+		},
+		start: func(string) error {
+			started = true
+			return nil
+		},
+	}
+	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"l/only\":{\"version\":\"0.9.0\"}}}]"}
+	var out strings.Builder
+	d := NewDecider(strings.NewReader("2\ny\n"), &out)
+	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, hooks, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started != true || restarted {
+		t.Fatalf("started=%v restarted=%v,want 启动且不重启", started, restarted)
+	}
+	if !strings.Contains(out.String(), "是否启动 web 服务?") || !strings.Contains(out.String(), "已启动。") {
+		t.Fatalf("output: %s", out.String())
+	}
+}
+
+// 交互模式 + 有变更 + 拒绝启动:提示手动命令,不调用启动。
+func TestRunSyncInteractiveDeclineStart(t *testing.T) {
+	home := t.TempDir()
+	mkPackageJSON(t, home, "web", "{\"name\":\"dsh-profile-web\"}")
+	syncRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(syncRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "profiles:\n  web: []\n"
+	if err := os.WriteFile(filepath.Join(syncRepo, "plugins.yaml"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	started := false
+	hooks := &serviceHooks{
+		busy:    func() bool { return false },
+		restart: func(string) error { return nil },
+		start: func(string) error {
+			started = true
+			return nil
+		},
+	}
+	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"l/only\":{\"version\":\"0.9.0\"}}}]"}
+	var out strings.Builder
+	d := NewDecider(strings.NewReader("2\nn\n"), &out)
+	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, hooks, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started {
+		t.Fatalf("拒绝后不应启动:%v", rec.cmds)
+	}
+	if !strings.Contains(out.String(), "已取消启动") {
+		t.Fatalf("output: %s", out.String())
 	}
 }
 
