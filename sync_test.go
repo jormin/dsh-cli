@@ -376,6 +376,33 @@ func TestRunSyncInteractiveDeclineStart(t *testing.T) {
 	}
 }
 
+// 交互模式 + 两侧无差异:不进入任何选择,直接结束。
+func TestRunSyncInteractiveNoDiffSkipsPrompt(t *testing.T) {
+	home := t.TempDir()
+	mkPackageJSON(t, home, "web", "{\"name\":\"dsh-profile-web\"}")
+	syncRepo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(syncRepo, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doc := "profiles:\n  web:\n    - name: both\n      version: \"1.0.0\"\n"
+	if err := os.WriteFile(filepath.Join(syncRepo, "plugins.yaml"), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec := &recorderRunner{lsJSON: "[{\"name\":\"dsh-profile-web\",\"version\":\"0.0.0\",\"path\":\"/x/web\",\"private\":true,\"dependencies\":{\"both\":{\"version\":\"1.0.0\"}}}]"}
+	var out strings.Builder
+	d := NewDecider(strings.NewReader(""), &out) // 无输入:若代码询问则会读到 EOF
+	err := runSync(fullSync, "/repo", syncRepo, home, &out, rec.run, noopHooks, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "两侧无差异") {
+		t.Fatalf("output: %s", out.String())
+	}
+	if strings.Contains(out.String(), "全局选择") {
+		t.Fatalf("无差异不应进入全局选择:\n%s", out.String())
+	}
+}
+
 // recorderRunner 记录命令;命中 ls 时返回 fixture;remoteEmpty 时 ls-remote 返回空(空远端)。
 type recorderRunner struct {
 	cmds        [][]string

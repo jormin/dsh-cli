@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode/utf8"
 )
 
 // DiffType 描述一个插件在两边的差异。
@@ -21,15 +20,15 @@ const (
 func (t DiffType) String() string {
 	switch t {
 	case DiffAdded:
-		return "新增"
+		return "added"
 	case DiffRemoved:
-		return "移除"
+		return "removed"
 	case DiffUpgrade:
-		return "升级"
+		return "upgrade"
 	case DiffDowngrade:
-		return "降级"
+		return "downgrade"
 	default:
-		return "一致"
+		return "same"
 	}
 }
 
@@ -88,6 +87,13 @@ func Compare(remote Manifest, local map[string][]Installed) []DiffItem {
 			}
 		}
 	}
+	// 输出顺序固定:按 (profile, 插件名) 排序,保证每次输出稳定
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].Profile != items[j].Profile {
+			return items[i].Profile < items[j].Profile
+		}
+		return items[i].Name < items[j].Name
+	})
 	return items
 }
 
@@ -101,29 +107,70 @@ func versionNewer(a, b string) bool {
 	return a > b
 }
 
-// RenderTable 输出差异表格;一致项按 profile 汇总为一行。
+// isWide 判断是否为东亚宽/全角字符(终端中占 2 列)。
+func isWide(r rune) bool {
+	return r == 0x2329 || r == 0x232A ||
+		(r >= 0x1100 && r <= 0x115F) ||
+		(r >= 0x2E80 && r <= 0xA4CF && r != 0x303F) ||
+		(r >= 0xAC00 && r <= 0xD7A3) ||
+		(r >= 0xF900 && r <= 0xFAFF) ||
+		(r >= 0xFE30 && r <= 0xFE4F) ||
+		(r >= 0xFF00 && r <= 0xFF60) ||
+		(r >= 0xFFE0 && r <= 0xFFE6)
+}
+
+// displayWidth 计算终端显示宽度:东亚宽/全角字符按 2 列计,保证 CJK 表格对齐。
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		if isWide(r) {
+			w += 2
+		} else {
+			w++
+		}
+	}
+	return w
+}
+
+// RenderTable 输出差异表格;列宽按内容动态计算(CJK 按 2 列),带表头分隔线,
+// 行尾无多余分隔符;一致项按 profile 汇总为一行。
 func RenderTable(items []DiffItem, sameCount map[string]int) string {
 	var b strings.Builder
-	fmt.Fprintln(&b, "profile | 插件 | 本机 | 仓库 | 类型")
-	widths := []int{8, 32, 10, 10, 6}
+	rows := [][]string{{"profile", "plugin", "local", "repo"}}
 	for _, it := range items {
 		if it.Type == DiffSame {
 			continue
 		}
-		row := []string{it.Profile, it.Name, it.Local, it.Remote, it.Type.String()}
-		for i, cell := range row {
-			w := utf8.RuneCountInString(cell)
-			padding := widths[i] - w
-			if padding < 1 {
-				padding = 1
-			}
-			b.WriteString(cell + strings.Repeat(" ", padding) + "| ")
-		}
-		b.WriteString("\n")
+		rows = append(rows, []string{it.Profile, it.Name, it.Local, it.Remote})
 	}
-	if len(items) == 0 {
+	if len(rows) == 1 {
 		b.WriteString("(无差异:仓库清单与本机实装完全一致)\n")
 		return b.String()
+	}
+	cols := len(rows[0])
+	widths := make([]int, cols)
+	for _, row := range rows {
+		for i, cell := range row {
+			if w := displayWidth(cell); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	for ri, row := range rows {
+		parts := make([]string, cols)
+		for i, cell := range row {
+			parts[i] = cell + strings.Repeat(" ", widths[i]-displayWidth(cell))
+		}
+		b.WriteString(strings.Join(parts, " | "))
+		b.WriteString("\n")
+		if ri == 0 {
+			seps := make([]string, cols)
+			for i := range widths {
+				seps[i] = strings.Repeat("-", widths[i])
+			}
+			b.WriteString(strings.Join(seps, " | "))
+			b.WriteString("\n")
+		}
 	}
 	names := make([]string, 0, len(sameCount))
 	for p := range sameCount {

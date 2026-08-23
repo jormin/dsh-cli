@@ -79,6 +79,7 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 	scanner := LocalScanner{Repo: env.repo, Home: env.home, Run: run}
 	// 先 pull 再扫描本地,保证与本机实装状态一致(plugins.yaml 损坏时也会先暴露在 pull 之后)
 	if mode&statusOnly == 0 {
+		fmt.Fprintln(out, "正在拉取同步仓库(DSH_SYNC_REPO)…")
 		pulled, err := git.Pull()
 		if err != nil {
 			return fmt.Errorf("已中止,请先手动解决同步仓库的 pull 失败后重试: %w", err)
@@ -87,6 +88,7 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 			fmt.Fprintln(out, "(同步仓库远端为空,已跳过 git pull,可直接首次初始化)")
 		}
 	}
+	fmt.Fprintln(out, "正在分析本机插件…")
 	local, err := scanner.All()
 	if err != nil {
 		return err
@@ -106,6 +108,10 @@ func runSync(mode syncMode, repo, syncRepo, home string, out io.Writer, run CmdR
 
 	items := Compare(remote, local)
 	fmt.Fprintln(out, RenderTable(onlyDiffs(items), sameCountByProfile(items)))
+	if len(onlyDiffs(items)) == 0 {
+		fmt.Fprintln(out, "两侧无差异,无需选择,直接结束(本地无变更)。")
+		return nil
+	}
 
 	// 4) 决策:文件缺失且本机有插件时,先问是否用本机清单播种;--yes 保持非交互
 	var final Manifest
