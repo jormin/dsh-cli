@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -167,7 +168,7 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 
 	fmt.Println("启动后台服务: pnpm dsh web --no-open")
 	fmt.Println("PID   :", cmd.Process.Pid)
-	fmt.Println("URL   : http://127.0.0.1:" + strconv.Itoa(webPort))
+	fmt.Println("URL   : http://127.0.0.1:" + strconv.Itoa(webPort) + " (就绪后带 token)")
 	fmt.Println("日志  :", logPath)
 	fmt.Println("停止  : dsh web stop (或 kill " + strconv.Itoa(cmd.Process.Pid) + ")")
 
@@ -179,11 +180,11 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	go func() { done <- cmd.Wait() }()
 
 	if waitPort(readyTimeout) {
-		fmt.Println("服务已启动: http://127.0.0.1:" + strconv.Itoa(webPort))
+		fmt.Println("服务已启动: " + displayURL(waitReadyURL(logPath, 5*time.Second)))
 		return nil
 	}
 	if logContainsMarker(logPath, readyMarker) {
-		fmt.Println("服务已启动(日志确认): http://127.0.0.1:" + strconv.Itoa(webPort))
+		fmt.Println("服务已启动(日志确认): " + displayURL(waitReadyURL(logPath, 5*time.Second)))
 		return nil
 	}
 	select {
@@ -192,6 +193,42 @@ func startService(repo string, launcherFlags, appArgs []string) error {
 	default:
 	}
 	return fmt.Errorf("未能在 %v 内确认端口 %d 监听,请查看日志尾部:\n%s", readyTimeout, webPort, tailLog(logPath, 20))
+}
+
+// webURLRe 匹配 dsh 打印的就绪 URL(新版带 ?token=...)。
+var webURLRe = regexp.MustCompile(`dsh web: (http[s]?://\S+)`)
+
+// readyWebURL 从日志读取最后一次 "dsh web: <url>" 中的访问地址。
+func readyWebURL(logPath string) string {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return ""
+	}
+	m := webURLRe.FindAllStringSubmatch(string(data), -1)
+	if len(m) == 0 {
+		return ""
+	}
+	return m[len(m)-1][1]
+}
+
+// waitReadyURL 端口就绪后再等一小段,直到日志里出现真实 URL(含 token)。
+func waitReadyURL(logPath string, timeout time.Duration) string {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if u := readyWebURL(logPath); u != "" {
+			return u
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return readyWebURL(logPath)
+}
+
+// displayURL 优先返回解析出的真实 URL(token),否则回退到默认地址。
+func displayURL(u string) string {
+	if strings.TrimSpace(u) != "" {
+		return u
+	}
+	return "http://127.0.0.1:" + strconv.Itoa(webPort)
 }
 
 // stopService 终止占用端口的进程;未运行视为成功.
