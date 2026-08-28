@@ -37,6 +37,17 @@
 - 更新完成后询问是否重启服务
 - `--check`:只检测,不更新;已是最新退出码 0,存在新版本退出码 1
 
+### `dsh build`
+
+清理并重新构建源码仓库(依次执行 `pnpm run clean`、`pnpm run build`)。仅本地变更,不 commit/push。
+
+### `dsh switch <tag> [--yes]`
+
+将源码仓库切换到指定的版本 tag 并重新构建(仅本地变更,不 commit/push)。
+
+- 例:`dsh switch dsh-v0.1.2-alpha.1`、`dsh switch v0.1.1-rc.2`(不带 `dsh-` 前缀也支持)
+- 切换前检查工作区干净并询问确认(`--yes` 跳过);切换后询问是否重启服务
+
 ### `dsh plugin [--profile <name>] <pnpm args...>`
 
 管理指定 profile 的插件(默认 profile:web)。

@@ -24,7 +24,7 @@ func main() {
 	root.SetVersionTemplate("{{.Version}}\n")
 	root.SilenceUsage = true
 	root.SilenceErrors = true
-	root.AddCommand(webCmd(), updateCmd(), pluginCmd(), upgradeCmd(), syncCmd())
+	root.AddCommand(webCmd(), updateCmd(), switchCmd(), buildCmd(), pluginCmd(), upgradeCmd(), syncCmd())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "错误: "+err.Error())
