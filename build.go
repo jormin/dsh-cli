@@ -11,7 +11,7 @@ func buildCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "build",
 		Short: "清理并重新构建 DSH 源码仓库",
-		Long:  "依次执行 pnpm run clean 与 pnpm run build(在 DSH_REPO 仓库内)。",
+		Long:  "依次执行 pnpm run clean 与 pnpm run build(在 DSH_REPO 仓库内),完成后询问是否启动/重启 web 服务。",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runBuild()
@@ -35,5 +35,5 @@ func runBuild() error {
 		return fmt.Errorf("pnpm run build 失败: %w", err)
 	}
 	fmt.Println("构建完成。")
-	return nil
+	return askStartOrRestart(repo, "构建完成")
 }
