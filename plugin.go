@@ -66,6 +66,32 @@ func maybeRestartAfterChange(repo string, busy func() bool, restart, start func(
 	return nil
 }
 
+// askStartOrRestart 按当前运行状态询问启动/重启服务;desc 描述变更来源(如"构建完成")。
+func askStartOrRestart(repo, desc string) error {
+	if portBusy() {
+		if !askYN(desc + ",是否重启 web 服务?") {
+			fmt.Println("已取消重启。可稍后手动运行 dsh web restart。")
+			return nil
+		}
+		fmt.Println("重启 web 服务…")
+		if err := restartWeb(repo); err != nil {
+			return err
+		}
+		fmt.Println("已重启。")
+		return nil
+	}
+	if !askYN(desc + ",是否启动 web 服务?") {
+		fmt.Println("已取消启动。可稍后手动运行 dsh web start。")
+		return nil
+	}
+	fmt.Println("启动 web 服务…")
+	if err := startWeb(repo); err != nil {
+		return err
+	}
+	fmt.Println("已启动。")
+	return nil
+}
+
 // pluginCmd 透传给源码仓库的 dsh plugin(管理 profile 插件).
 func pluginCmd() *cobra.Command {
 	var profile string

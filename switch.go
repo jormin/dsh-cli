@@ -160,14 +160,14 @@ func runSwitch(arg string, yes bool) error {
 	if err := runCmd(repo, "pnpm", "install"); err != nil {
 		return fmt.Errorf("pnpm install 失败: %w", err)
 	}
+	fmt.Println("清理: pnpm run clean")
+	if err := runCmd(repo, "pnpm", "run", "clean"); err != nil {
+		return fmt.Errorf("pnpm run clean 失败: %w", err)
+	}
 	fmt.Println("重新构建: pnpm run build (可能需要几分钟)")
 	if err := runCmd(repo, "pnpm", "run", "build"); err != nil {
 		return fmt.Errorf("pnpm run build 失败: %w", err)
 	}
 	fmt.Println()
-	if askYN("切换完成。是否启动服务?") {
-		_ = stopService()
-		return startService(repo, nil, nil)
-	}
-	return nil
+	return askStartOrRestart(repo, "切换完成")
 }
