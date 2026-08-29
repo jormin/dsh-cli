@@ -10,6 +10,29 @@
 - 构建:`go build -o dsh .`
 - 安装:将产物放入 PATH,如 `/usr/local/bin/dsh`
 
+### 一键安装(macOS / Linux)
+
+自动识别操作系统与 CPU 架构,从 GitHub Releases 下载对应版本安装到 `/usr/local/bin`(目录不可写时自动用 `sudo` 提示授权):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jormin/dsh-cli/master/install.sh | sh
+```
+
+常用方式:
+
+```bash
+# 指定版本安装(默认安装最新 release)
+curl -fsSL https://raw.githubusercontent.com/jormin/dsh-cli/master/install.sh | DSH_VERSION=v0.0.1 sh
+
+# 安装到用户目录(无需 sudo)
+curl -fsSL https://raw.githubusercontent.com/jormin/dsh-cli/master/install.sh | DSH_INSTALL_DIR="$HOME/.local/bin" sh
+
+# 卸载
+curl -fsSL https://raw.githubusercontent.com/jormin/dsh-cli/master/install.sh | sh -s -- --uninstall
+```
+
+环境变量:`DSH_VERSION`(版本)、`DSH_INSTALL_DIR`(安装目录)、`DSH_OS` / `DSH_ARCH`(手动指定系统/架构,一般无需设置)、`DSH_CLI_REPO`(发布仓库,与 `dsh upgrade` 的约定一致)、`DSH_CHECKSUM`(可选 SHA-256 校验)。
+
 ## 环境变量
 
 | 变量 | 必需 | 说明 |
